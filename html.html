@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kangaroo MiniGame</title>
+  <style>
+    body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #87CEEB;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#interface {
+  width: 600px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+#language-select {
+  font-size: 16px;
+  padding: 5px;
+}
+
+#ranking {
+  width: 150px;
+  text-align: left;
+}
+
+#ranking-title {
+  margin: 0;
+}
+
+#ranking-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 14px;
+}
+
+#game-container {
+  position: relative;
+  width: 600px;
+  height: 300px;
+  background-color: #E0F7FA;
+  overflow: hidden;
+  border: 2px solid #000;
+}
+
+#message {
+  position: absolute;
+  top: 10px;
+  width: 100%;
+  text-align: center;
+  font-size: 18px;
+  color: red;
+  display: none; 
+}
+
+#kangaroo {
+  position: absolute;
+  bottom: 10%;
+  left: 10%;
+  width: 50px;
+  height: 50px;
+  background-color: #FF6F00;
+  border-radius: 10px;
+}
+
+#obstacle {
+  position: absolute;
+  bottom: 10%;
+  right: -50px;
+  width: 40px;
+  height: 40px;
+  background-color: #4CAF50;
+  border-radius: 5px;
+}
+
+#score {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 18px;
+  color: #000;
+}
+
+#start-button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 20px;
+  font-size: 18px;
+  background-color: #FF6F00;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+  </style>
+</head>
+<body>
+  <div id="interface">
+    <select id="language-select">
+      <option value="es">Español</option>
+      <option value="en">English</option>
+      <option value="fr">Français</option>
+      <option value="zh">中文</option>
+      <option value="ja">日本語</option>
+      <option value="ko">한국어</option>
+      <option value="ru">Русский</option>
+    </select>
+    <div id="ranking">
+      <h3 id="ranking-title">Ranking</h3>
+      <ol id="ranking-list"></ol>
+    </div>
+  </div>
+
+  <div id="game-container">
+    <h2 id="message"></h2>
+    <div id="kangaroo"></div>
+    <div id="obstacle"></div>
+    <div id="score">Puntos: 0</div>
+    <button id="start-button">Comenzar</button>
+  </div>
+
+  <script>
+    const kangaroo = document.getElementById("kangaroo");
+const obstacle = document.getElementById("obstacle");
+const scoreDisplay = document.getElementById("score");
+const startButton = document.getElementById("start-button");
+const message = document.getElementById("message");
+const rankingList = document.getElementById("ranking-list");
+const languageSelect = document.getElementById("language-select");
+
+let isJumping = false;
+let isGameOver = false;
+let score = 0;
+let gameSpeed = 5;
+let obstacleInterval;
+
+// Idiomas
+const translations = {
+  es: { score: "Puntos", start: "Comenzar", message: "¡Ohh, muy bien hecho! Conseguíste" },
+  en: { score: "Score", start: "Start", message: "Ohh, well done! You scored" },
+  fr: { score: "Points", start: "Commencer", message: "Ohh, bien joué ! Vous avez marqué" },
+  zh: { score: "分数", start: "开始", message: "哦，干得好！你得到了" },
+  ja: { score: "スコア", start: "開始", message: "ああ、よくやった！あなたは得点しました" },
+  ko: { score: "점수", start: "시작", message: "오, 잘했어요! 당신은 득점했습니다" },
+  ru: { score: "Очки", start: "Начать", message: "Ох, молодец! Ты набрал" },
+};
+
+// Guardar y mostrar el ranking
+function updateRanking() {
+  const rankings = JSON.parse(localStorage.getItem("rankings") || "[]");
+  rankings.sort((a, b) => b.score - a.score);
+  rankingList.innerHTML = rankings
+    .slice(0, 10)
+    .map((player, index) => `<li>${index + 1}. ${player.name}: ${player.score}</li>`)
+    .join("");
+}
+
+function saveToRanking(playerName, playerScore) {
+  const rankings = JSON.parse(localStorage.getItem("rankings") || "[]");
+  rankings.push({ name: playerName, score: playerScore });
+  localStorage.setItem("rankings", JSON.stringify(rankings));
+}
+
+// Cambiar idioma
+languageSelect.addEventListener("change", (e) => {
+  const lang = e.target.value;
+  const t = translations[lang];
+  scoreDisplay.textContent = `${t.score}: ${score}`;
+  startButton.textContent = t.start;
+});
+
+// Mostrar mensaje de fin
+function showMessage() {
+  const lang = languageSelect.value;
+  const t = translations[lang];
+  message.textContent = `${t.message} ${score} ${t.score.toLowerCase()}!`;
+  message.style.display = "block";
+}
+
+// Movimiento del obstáculo
+function moveObstacle() {
+  let obstaclePosition = 600;
+  clearInterval(obstacleInterval); 
+
+  obstacleInterval = setInterval(() => {
+    if (isGameOver) {
+      clearInterval(obstacleInterval);
+      return;
+    }
+
+    obstaclePosition -= gameSpeed; 
+
+    if (obstaclePosition <= -50) {
+      obstaclePosition = 600; 
+      score++;
+      scoreDisplay.textContent = `${translations[languageSelect.value].score}: ${score}`;
+      if (score % 10 === 0) {
+        gameSpeed += 2; 
+      }
+    }
+
+    obstacle.style.left = `${obstaclePosition}px`;
+
+
+    const kangarooBottom = parseInt(getComputedStyle(kangaroo).bottom.replace("px", ""));
+    if (
+      obstaclePosition > 50 && obstaclePosition < 90 && 
+      kangarooBottom <= 40 
+    ) {
+      isGameOver = true;
+      clearInterval(obstacleInterval);
+      saveToRanking(prompt("Tu nombre:"), score);
+      updateRanking();
+      showMessage();
+    }
+  }, 20);
+}
+
+
+function jump() {
+  if (isJumping || isGameOver) return;
+
+  isJumping = true;
+  let jumpHeight = 0;
+
+  const jumpUp = setInterval(() => {
+    if (jumpHeight >= 150) {
+      clearInterval(jumpUp);
+
+      const fallDown = setInterval(() => {
+        if (jumpHeight <= 0) {
+          clearInterval(fallDown);
+          isJumping = false;
+        }
+        jumpHeight -= 10;
+        kangaroo.style.bottom = `${10 + jumpHeight}px`;
+      }, 20);
+    }
+    jumpHeight += 10;
+    kangaroo.style.bottom = `${10 + jumpHeight}px`;
+  }, 20);
+}
+
+
+function startGame() {
+  startButton.style.display = "none";
+  message.style.display = "none";
+  score = 0;
+  gameSpeed = 5;
+  isGameOver = false;
+  scoreDisplay.textContent = `${translations[languageSelect.value].score}: ${score}`;
+  obstacle.style.left = "600px"; 
+  moveObstacle();
+}
+
+
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") {
+    jump();
+  }
+});
+
+startButton.addEventListener("click", startGame);
+
+  </script>
+</body>
+</html>
